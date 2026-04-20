@@ -88,7 +88,10 @@ class MeetingController extends Controller
         // =========================
         // 📋 5. AMBIL DATA LOCAL (TANPA MISSING)
         // =========================
-        $localMeetings = \App\Models\Meeting::where('status', '!=', 'missing_in_zoom')->where('status', '!=', 'finished')->get();
+        $localMeetings = \App\Models\Meeting::where('status', '!=', 'missing_in_zoom')
+            ->where('status', '!=', 'finished')
+            ->where('status', '!=', 'deleted')
+            ->get();
 
         // ambil zoom_meeting_id yang valid
         $localZoomIds = $localMeetings
