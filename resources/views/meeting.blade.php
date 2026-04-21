@@ -2,20 +2,29 @@
 <html>
 
 <head>
-    <title>Booking Zoom IAIN Kendari</title>
-    <link href="https://iainkendari.ac.id/images/favicon.ico" rel="shortcut icon" type="image/x-icon" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        .text-gradient {
-            background: linear-gradient(45deg, #0d6efd, #6610f2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-    </style>
-</head>
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <title>Booking Zoom IAIN Kendari</title>
+
+        <link href="https://iainkendari.ac.id/images/favicon.ico" rel="shortcut icon" type="image/x-icon" />
+
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+        <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+        <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+        <style>
+            .text-gradient {
+                background: linear-gradient(45deg, #0d6efd, #6610f2);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
+        </style>
+    </head>
 
 <body>
 
@@ -742,10 +751,8 @@
                     new bootstrap.Modal(document.getElementById('modalCreate')).show();
                 },
                 editMeeting(m) {
-                    console.log(m);
 
                     this.modalSearch.hide();
-                    // const zoomId = this.form.zoom_account_id
 
                     this.mode = 'edit'
                     this.form = {
