@@ -33,7 +33,7 @@
 
         <h4 class="mb-4 fw-bold d-flex align-items-center gap-2">
             <i class="bi bi-camera-video text-primary fs-3"></i>
-            <span class="text-gradient">Booking Link Zoom IAIN KENDARI</span>
+            <span class="text-gradient">Booking Link Zoom IAIN KENDARI Versi 1.0</span>
         </h4>
 
 
