@@ -187,6 +187,9 @@ class MeetingController extends Controller
         $meetings = Meeting::where('tanggal', $tanggal)
             ->where('zoom_account_id', $request->zoom_account_id)
             ->whereIn('status', ['scheduled', 'ongoing'])
+            ->when($request->id, function ($q) use ($request) {
+                $q->where('id', '!=', $request->id); // 🔥 exclude dirinya
+            })
             ->get();
         foreach ($meetings as $m) {
             $m_start = Carbon::parse($m->tanggal . ' ' . $m->jam_mulai);
