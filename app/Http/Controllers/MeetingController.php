@@ -6,20 +6,29 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use App\Models\Meeting;
 use Carbon\Carbon;
+use App\Models\ZoomAccount;
 
 class MeetingController extends Controller
 {
+    public function getZoomAccounts()
+    {
+        $accounts = ZoomAccount::where('is_active', true)
+            ->select('id', 'name', 'capacity')
+            ->get();
+
+        return response()->json($accounts);
+    }
     // ===============================
     // 🔐 TOKEN ZOOM
     // ===============================
-    private function generateToken()
+    private function generateToken($account)
     {
         $response = Http::withBasicAuth(
-            env('ZOOM_CLIENT_ID'),
-            env('ZOOM_CLIENT_SECRET')
+            $account->client_id,
+            $account->client_secret
         )->asForm()->post('https://zoom.us/oauth/token', [
             'grant_type' => 'account_credentials',
-            'account_id' => env('ZOOM_ACCOUNT_ID')
+            'account_id' => $account->account_id
         ]);
 
         return $response['access_token'] ?? null;
@@ -28,12 +37,14 @@ class MeetingController extends Controller
     // ===============================
     // 📊 LIST JADWAL
     // ===============================
-    public function index()
+    public function index(Request $request)
     {
         // =========================
         // 🔥 1. AMBIL ZOOM (BELUM SELESAI)
         // =========================
-        $zoomMeetings = collect($this->getZoomMeetings())
+        $zoomAccount = ZoomAccount::findOrFail($request->zoom_account_id);
+
+        $zoomMeetings = collect($this->getZoomMeetings($zoomAccount))
             ->filter(function ($z) {
 
                 $start = \Carbon\Carbon::parse($z['start_time'])
@@ -51,6 +62,7 @@ class MeetingController extends Controller
         // 🔄 2. UPDATE STATUS WAKTU (AUTO)
         // =========================
         \App\Models\Meeting::whereIn('status', ['scheduled', 'ongoing'])
+            ->where('zoom_account_id', $request->zoom_account_id)
             ->get()
             ->each(function ($m) {
 
@@ -70,6 +82,7 @@ class MeetingController extends Controller
         // 🧹 3. SYNC: TANDAI YANG HILANG DI ZOOM
         // =========================
         \App\Models\Meeting::whereNotNull('zoom_meeting_id')
+            ->where('zoom_account_id', $request->zoom_account_id)
             ->whereNotIn('zoom_meeting_id', $zoomIds)
             ->whereIn('status', ['scheduled', 'ongoing']) // 🔥 penting
             ->where('created_at', '<', now()->subMinutes(2)) // delay sync
@@ -81,6 +94,7 @@ class MeetingController extends Controller
         // 🧹 4. TANDAI YANG SUDAH LEWAT
         // =========================
         \App\Models\Meeting::whereDate('tanggal', '<', now()->toDateString())
+            ->where('zoom_account_id', $request->zoom_account_id)
             ->update([
                 'status' => 'finished'
             ]);
@@ -89,6 +103,8 @@ class MeetingController extends Controller
         // 📋 5. AMBIL DATA LOCAL (TANPA MISSING)
         // =========================
         $localMeetings = \App\Models\Meeting::where('status', '!=', 'missing_in_zoom')
+            ->where('zoom_account_id', $request->zoom_account_id)
+
             ->where('status', '!=', 'finished')
             ->where('status', '!=', 'deleted')
             ->get();
@@ -105,7 +121,8 @@ class MeetingController extends Controller
         $local = collect($localMeetings)->map(function ($m) {
             return [
                 'id' => $m->id, // 🔥 WAJIB
-
+                'zoom_name' => $m->zoomAccount->name ?? '-',
+                'zoom_account_id' => $m->zoom_account_id,
                 'topic' => $m->topic,
                 'tanggal' => $m->tanggal,
                 'jam_mulai' => $m->jam_mulai,
@@ -157,51 +174,7 @@ class MeetingController extends Controller
             'data' => $all
         ]);
     }
-    public function getJadwal()
-    {
-        $zoomMeetings = collect($this->getZoomMeetings())
-            ->filter(function ($z) {
-                return Carbon::parse($z['start_time'])->isFuture();
-            });
 
-        $zoomIds = $zoomMeetings->pluck('id')->toArray();
-
-        // 🧹 bersihkan lokal
-        Meeting::whereNotNull('zoom_meeting_id')
-            ->whereNotIn('zoom_meeting_id', $zoomIds)
-            ->delete();
-
-        // 📋 ambil lokal
-        $localMeetings = Meeting::get()->map(function ($m) {
-            return [
-                'tanggal' => $m->tanggal,
-                'jam_mulai' => $m->jam_mulai,
-                'duration' => $m->duration,
-                'nama_pemesan' => $m->nama_pemesan,
-                'source' => 'local'
-            ];
-        });
-
-        // 📋 ambil zoom
-        $zoomData = $zoomMeetings->map(function ($z) {
-            return [
-                'tanggal' => Carbon::parse($z['start_time'])->format('Y-m-d'),
-                'jam_mulai' => Carbon::parse($z['start_time'])->format('H:i'),
-                'duration' => $z['duration'],
-                'nama_pemesan' => 'Zoom User',
-                'source' => 'zoom'
-            ];
-        });
-
-        // 🔥 gabungkan
-        $all = $localMeetings->merge($zoomData)
-            ->sortBy(['tanggal', 'jam_mulai'])
-            ->values();
-
-        return response()->json([
-            'data' => $all
-        ]);
-    }
     // ===============================
     // 🔍 CEK JADWAL (BENTROK / TIDAK)
     // ===============================
@@ -212,6 +185,7 @@ class MeetingController extends Controller
         $end = (clone $start)->addMinutes($request->duration);
 
         $meetings = Meeting::where('tanggal', $tanggal)
+            ->where('zoom_account_id', $request->zoom_account_id)
             ->whereIn('status', ['scheduled', 'ongoing'])
             ->get();
         foreach ($meetings as $m) {
@@ -236,7 +210,8 @@ class MeetingController extends Controller
                 ]);
             }
         }
-        $zoomMeetings = collect($this->getZoomMeetings())
+        $zoomAccount = ZoomAccount::find($request->zoom_account_id);
+        $zoomMeetings = collect($this->getZoomMeetings($zoomAccount))
             ->filter(function ($z) {
                 return Carbon::parse($z['start_time'])->isFuture();
             });
@@ -277,8 +252,11 @@ class MeetingController extends Controller
             'unit' => 'required',
             'no_hp' => 'required'
         ]);
+        $zoomAccount = ZoomAccount::findOrFail($request->zoom_account_id);
+        // return $zoomAccount;
 
-        $token = $this->generateToken();
+        $token = $this->generateToken($zoomAccount);
+        // $token = $this->generateToken();
 
         $start = Carbon::createFromFormat(
             'Y-m-d H:i', // 🔥 TANPA detik
@@ -299,6 +277,7 @@ class MeetingController extends Controller
         $data = $response->json();
 
         $meeting = Meeting::create([
+            'zoom_account_id' => $zoomAccount->id,
             'topic' => $data['topic'],
             'tanggal' => $request->tanggal,
             'jam_mulai' => $request->jam_mulai,
@@ -321,6 +300,8 @@ class MeetingController extends Controller
     {
         $meetings = Meeting::where('no_hp', $request->no_hp)
             ->whereNotIn('status', ['missing_in_zoom', 'finished', 'deleted'])
+            ->where('zoom_account_id', $request->zoom_account_id)
+
             ->orderBy('tanggal', 'desc')
             ->get();
         // $meetings = Meeting::all();
@@ -339,6 +320,7 @@ class MeetingController extends Controller
                 'join_url' => $m->join_url,
                 'password' => $m->password,
                 'zoom_meeting_id' => $m->zoom_meeting_id,
+                'zoom_account_id' => $m->zoom_account_id,
                 'status' => $m->zoom_meeting_id ? 'local_zoom' : 'local'
             ];
         });
@@ -348,10 +330,9 @@ class MeetingController extends Controller
         ]);
     }
 
-    private function getZoomMeetings()
+    private function getZoomMeetings($account)
     {
-        $token = $this->generateToken();
-
+        $token = $this->generateToken($account);
         $response = Http::withToken($token)
             ->get('https://api.zoom.us/v2/users/me/meetings', [
                 'type' => 'scheduled'
@@ -401,8 +382,10 @@ class MeetingController extends Controller
         // =========================
         // 🔥 UPDATE KE ZOOM
         // =========================
+        $zoomAccount = ZoomAccount::findOrFail($request->zoom_account_id);
+
         if ($meeting->zoom_meeting_id) {
-            Http::withToken($this->generateToken())
+            Http::withToken($this->generateToken($zoomAccount))
                 ->patch("https://api.zoom.us/v2/meetings/{$meeting->zoom_meeting_id}", [
                     "topic" => $request->topic,
                     "start_time" => $start_time,
@@ -428,6 +411,7 @@ class MeetingController extends Controller
             'status' => 'success'
         ]);
     }
+
     public function delete(Request $request)
     {
         $request->validate([
@@ -454,8 +438,10 @@ class MeetingController extends Controller
         // =========================
         // 🔥 DELETE DI ZOOM
         // =========================
+        $zoomAccount = ZoomAccount::findOrFail($request->zoom_account_id);
+
         if ($meeting->zoom_meeting_id) {
-            Http::withToken($this->generateToken())
+            Http::withToken($this->generateToken($zoomAccount))
                 ->delete("https://api.zoom.us/v2/meetings/{$meeting->zoom_meeting_id}");
         }
 

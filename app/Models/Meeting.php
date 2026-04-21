@@ -17,7 +17,14 @@ class Meeting extends Model
         'join_url',
         'password',
         'status',
-        'zoom_meeting_id'
+        'zoom_meeting_id',
+        'zoom_account_id'
 
     ];
+
+    // Meeting.php
+    public function zoomAccount()
+    {
+        return $this->belongsTo(ZoomAccount::class);
+    }
 }

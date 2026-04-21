@@ -34,7 +34,7 @@ return new class extends Migration
             // status
             $table->enum('status', ['scheduled', 'ongoing', 'finished', 'missing_in_zoom', 'deleted'])
                 ->default('scheduled');
-
+            $table->foreignId('zoom_account_id')->nullable();
             $table->string('zoom_meeting_id')->nullable();
             $table->timestamps();
         });

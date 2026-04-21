@@ -8,7 +8,13 @@
     <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-
+    <style>
+        .text-gradient {
+            background: linear-gradient(45deg, #0d6efd, #6610f2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
 </head>
 
 <body>
@@ -16,12 +22,27 @@
 
     <div id="app" class="container mt-4">
 
-        <h4 class="mb-4 fw-bold">
-            <i class="bi bi-camera-video"></i> Booking Link Zoom
+        <h4 class="mb-4 fw-bold d-flex align-items-center gap-2">
+            <i class="bi bi-camera-video text-primary fs-3"></i>
+            <span class="text-gradient">Booking Link Zoom IAIN KENDARI</span>
         </h4>
-        <p>Yang mau pakai zoom, silahkan buat di aplikasi ini ya... jika bentrok, silahkan cari jadwal lain.</p>
+
+
+        <p>Yang mau pakai zoom, silahkan buat di aplikasi ini ya... semoga jadwalmu belum ada yang ambil</p>
         <!-- ACTION BUTTON -->
-        <div class="row g-2 mb-4">
+        <div class="col-12">
+            <label class="form-label fw-bold">Pilih Akun Zoom yang Ingin Digunakan:</label>
+            <select
+                v-model="form.zoom_account_id"
+                class="form-control mb-3"
+                @change="loadMeetings">
+                <option value="">Pilih Zoom</option>
+                <option v-for="z in zoomAccounts" :value="z.id">
+                    @{{ z.name }} (Kapasitas @{{ z.capacity }})
+                </option>
+            </select>
+        </div>
+        <div class="row g-2 mb-4" v-if="form.zoom_account_id">
             <div class="col-12 col-md-4">
                 <button class="btn btn-primary w-100" @click="openModal">
                     <i class="bi bi-plus-circle"></i> Buat Link Zoom
@@ -30,26 +51,10 @@
 
             <div class="col-12 col-md-4">
                 <button class="btn btn-warning w-100" @click="openSearch">
-                    <i class="bi bi-search"></i> Cari Link / Edit
+                    <i class="bi bi-search"></i> Cari / Edit Link
                 </button>
             </div>
 
-            <!-- <div class="col-12 col-md-4">
-                <button
-                    class="btn btn-info w-100"
-                    @click="loadMeetings"
-                    :disabled="loadingMeetings">
-
-                    <span v-if="!loadingMeetings">
-                        <i class="bi bi-calendar-event"></i> Lihat Jadwal
-                    </span>
-
-                    <span v-else>
-                        <span class="spinner-border spinner-border-sm"></span>
-                        Memuat...
-                    </span>
-                </button>
-            </div> -->
         </div>
 
         <!-- LOADING GLOBAL -->
@@ -59,17 +64,15 @@
         </div>
 
         <!-- EMPTY STATE -->
-        <div v-if="meetings.length == 0 && !loadingMeetings" class="text-center p-5">
-            <!-- <i class="bi bi-calendar-x" style="font-size: 60px;"></i> -->
-            <!-- <h5 class="mt-3">Belum ada jadwal</h5> -->
-            <p class="text-muted">Jadwal Kosong, Ambil memang link zoom sebelum diambil orang lain</p>
+        <div v-if="meetings.length == 0 && isPilihAkun && !loadingMeetings" class="text-center p-5">
+            <div class="alert alert-warning">Jadwal Kosong, Ambil memang link zoom sebelum diambil orang lain</div>
         </div>
 
         <!-- ========================= -->
         <!-- 📱 MOBILE (CARD VIEW) -->
         <!-- ========================= -->
         <div class="d-md-none">
-            <div class="card mb-3 shadow-sm" v-for="(m,index) in meetings" :key="index">
+            <div class="card mb-3 shadow-sm" v-for="(m,index) in meetings" :key="index" v-if="!loadingMeetings && meetings.length > 0">
 
                 <div class="card-body">
 
@@ -96,7 +99,7 @@
                     <!-- STATUS -->
                     <div class="mt-2">
                         <span v-if="getStatus(m)=='ongoing'" class="badge bg-warning">
-                            ⏳ Sedang Berlangsung
+                            ⏳ Berlangsung
                         </span>
                         <span v-else class="badge bg-success">
                             ✔ Terjadwal
@@ -113,6 +116,27 @@
                         </small>
                     </div>
 
+                    <!-- AKSI (MOBILE) -->
+                    <div v-if="isSearching" class="mt-3 d-flex gap-2">
+                        <!-- COPY LINK -->
+                        <button
+                            class="btn btn-primary btn-sm w-100"
+                            @click="copyAll(m)">
+                            <i class="bi bi-clipboard"></i> Copy Link
+                        </button>
+                        <button class="btn btn-warning btn-sm w-100" @click="editMeeting(m)">
+                            <i class="bi bi-pencil"></i> Edit
+                        </button>
+
+                        <button
+                            class="btn btn-danger btn-sm w-100"
+                            @click="deleteMeeting(m)"
+                            :disabled="m.status === 'finished' || m.status === 'ongoing'">
+                            <i class="bi bi-trash"></i> Hapus
+                        </button>
+
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -120,8 +144,8 @@
         <!-- ========================= -->
         <!-- 💻 DESKTOP (TABLE VIEW) -->
         <!-- ========================= -->
-        <div class="card shadow-sm d-none d-md-block" v-if="meetings.length > 0">
-
+        <div class="card shadow-sm d-none d-md-block"
+            v-if="!loadingMeetings && meetings.length > 0">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-calendar3"></i> Jadwal Booking</span>
                 <span class="badge bg-primary">@{{ meetings.length }} Jadwal</span>
@@ -139,7 +163,7 @@
                             <th>Waktu</th>
                             <th>Pemesan</th>
                             <th>Status</th>
-                            <th>Sumber</th>
+                            <th>Dibuat dari</th>
                         </tr>
                     </thead>
 
@@ -148,7 +172,12 @@
 
                             <td class="text-center">@{{ index + 1 }}</td>
                             <td v-if="isSearching" class="text-center">
-
+                                <!-- 🔥 COPY LINK -->
+                                <button
+                                    class="btn btn-primary btn-sm me-1"
+                                    @click="copyAll(m)">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
                                 <button class="btn btn-warning btn-sm me-1" @click="editMeeting(m)">
                                     <i class="bi bi-pencil"></i>
                                 </button>
@@ -183,19 +212,18 @@
 
                             <td class="text-center">
                                 <span v-if="getStatus(m)=='ongoing'" class="badge bg-warning">
-                                    ⏳
+                                    Berlangsung
                                 </span>
                                 <span v-else class="badge bg-success">
-                                    ✔
+                                    Terjadwal
                                 </span>
                             </td>
-
                             <td class="text-center">
                                 <span v-if="m.status=='zoom_only'" class="badge bg-secondary">
-                                    Zoom
+                                    Dari Zoom Langsung
                                 </span>
                                 <span v-else class="badge bg-success">
-                                    App
+                                    Dari Aplikasi Booking
                                 </span>
                             </td>
 
@@ -218,12 +246,7 @@
 
                         <h5 class="mb-0">
                             <i class="bi bi-calendar-plus"></i>
-                            Booking Zoom
-                            <div class="alert" :class="mode === 'edit' ? 'alert-warning' : 'alert-success'">
-                                <b>
-                                    @{{ mode === 'edit' ? 'Mode Edit Jadwal' : 'Buat Jadwal Baru' }}
-                                </b>
-                            </div>
+                            Booking Zoom (@{{ mode === 'edit' ? 'Mode Edit Jadwal' : 'Buat Jadwal Baru' }})
                         </h5>
 
                         <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -302,6 +325,9 @@
                             <div class="card border-0 shadow-sm">
                                 <div class="card-body">
 
+                                    <h5 class="mb-3 mt-0">
+                                        <i class="bi bi-account"></i> Akun Zoom: @{{ selectedZoom ? selectedZoom.name : '-' }} (Kapasitas @{{ selectedZoom ? selectedZoom.capacity : '-' }})
+                                    </h5>
                                     <h6 class="mb-3">
                                         <i class="bi bi-clock"></i> Pilih Jadwal Meeting
                                     </h6>
@@ -548,7 +574,7 @@
                             </div>
 
                             <!-- 🔹 ACTION -->
-                            <button class="btn btn-secondary w-100 mb-2" @click="copyAll">
+                            <button class="btn btn-secondary w-100 mb-2" @click="copyAll(result)">
                                 📋 Copy Link Zoom
                             </button>
 
@@ -638,6 +664,7 @@
                 search_hp: '',
                 searchResult: [],
                 form: {
+                    zoom_account_id: '',
                     tanggal: '',
                     jam_mulai: '',
                     duration: 60,
@@ -654,27 +681,53 @@
                 searched: false,
                 mode: 'create',
                 isSearching: false, // 🔥 ini kuncinya
-                loadingSubmit: false // 🔥 ini
-
-
-
+                loadingSubmit: false, // 🔥 ini,
+                zoomAccounts: [], // 🔥 daftar akun zoom untuk dropdown
+                isPilihAkun: false // 🔥 untuk kontrol tampil dropdown akun atau input manual
             },
             mounted() {
-                this.loadMeetings();
+                this.getZoomAccounts()
                 this.modalSearch = new bootstrap.Modal(document.getElementById('modalSearch'));
                 this.modalCreate = new bootstrap.Modal(document.getElementById('modalCreate'));
+                this.form.jam_mulai = this.getCurrentTime()
 
             },
+            computed: {
+                selectedZoom() {
+                    return this.zoomAccounts.find(z => z.id == this.form.zoom_account_id)
+                }
+            },
             methods: {
+                getZoomAccounts() {
+                    axios.get('/api/zoom-accounts')
+                        .then(res => {
+                            this.zoomAccounts = res.data
+
+                        })
+                },
+
                 async loadMeetings() {
+                    if (!this.form.zoom_account_id) {
+                        this.isPilihAkun = false
+
+                        this.meetings = []
+                        return
+                    }
+
                     this.loadingMeetings = true
 
                     try {
-                        const res = await axios.get('/api/meetings')
-                        // return console.log(res.data);
-                        this.isSearching = false // 🔥 tandai sedang hasil search
-
+                        const res = await axios.get('/api/meetings', {
+                            params: {
+                                zoom_account_id: this.form.zoom_account_id
+                            }
+                        })
+                        console.log(this.form.zoom_account_id);
+                        this.isPilihAkun = true
+                        this.isSearching = false
                         this.meetings = res.data.data
+                        console.log(this.meetings);
+
 
                     } catch (e) {
                         console.log(e)
@@ -682,20 +735,17 @@
                         this.loadingMeetings = false
                     }
                 },
-                cekJadwal() {
-                    axios.post('/api/meetings/get-jadwal').then(res => {
-                        console.log(res);
 
-                        this.meetings = res.data.data;
-                    });
-                },
                 openModal() {
-                    this.resetForm();
+                    // this.resetForm();
                     this.step = 1;
                     new bootstrap.Modal(document.getElementById('modalCreate')).show();
                 },
                 editMeeting(m) {
+                    console.log(m);
+
                     this.modalSearch.hide();
+                    // const zoomId = this.form.zoom_account_id
 
                     this.mode = 'edit'
                     this.form = {
@@ -722,6 +772,7 @@
                         this.errorMessage = '';
 
                         const res = await axios.post('/api/meetings/check', this.form);
+                        console.log(res);
 
                         this.status = res.data.status;
                         this.source = res.data.source;
@@ -790,31 +841,13 @@
                         })
                 },
 
-                // async search() {
-                //     this.loadingSearch = true
-                //     this.searched = true
-
-                //     try {
-                //         const res = await axios.get('/api/meetings/search', {
-                //             params: {
-                //                 no_hp: this.search_hp
-                //             }
-                //         })
-
-                //         this.meetings = res.data.data
-
-                //     } catch (e) {
-                //         console.log(e)
-                //     } finally {
-                //         this.loadingSearch = false
-                //     }
-                // },
                 search() {
                     this.loadingSearch = true
                     this.searched = false
 
                     axios.post('/api/meetings/search', {
-                            no_hp: this.search_hp
+                            no_hp: this.search_hp,
+                            zoom_account_id: this.form.zoom_account_id
                         })
                         .then(res => {
                             // return console.log(res.data);
@@ -840,10 +873,9 @@
                         })
                 },
 
-                async copyLink(m) {
-
+                async copyAll(m) {
                     let text = [
-                        `🎥 *${m.topic}*`,
+                        `📢 *${m.topic}*`,
                         `📅 ${this.formatTanggal(m.tanggal)}`,
                         `⏰ ${m.jam_mulai} (${m.duration} menit)`,
                         '',
@@ -853,36 +885,23 @@
                     ].join('\n');
 
                     await navigator.clipboard.writeText(text);
-
-                    alert('Semua info berhasil disalin');
-                },
-
-
-                async copyAll() {
-                    let text = [
-                        `📢 *${this.result.topic}*`,
-                        `📅 ${this.formatTanggal(this.result.tanggal)}`,
-                        `⏰ ${this.result.jam_mulai} (${this.result.duration} menit)`,
-                        '',
-                        `🔗 ${this.result.join_url}`,
-                        `🆔 ID: ${this.result.zoom_meeting_id}`,
-                        `🔑 Password: ${this.result.password}`
-                    ].join('\n');
-
-                    await navigator.clipboard.writeText(text);
                     alert('Semua info berhasil disalin');
                 },
 
                 resetForm() {
+                    const zoomId = this.form.zoom_account_id
+
                     this.form = {
+                        zoom_account_id: zoomId, // 🔥 dipertahankan
                         tanggal: '',
-                        jam_mulai: '',
+                        jam_mulai: this.getCurrentTime(),
                         duration: 60,
                         nama_pemesan: '',
                         unit: '',
                         no_hp: '',
                         topic: ''
                     };
+
                     this.step = 1;
                 },
 
@@ -924,6 +943,7 @@
                     if (!confirm(`Hapus meeting ${m.topic}?`)) return
                     axios.post('/api/delete-meeting', {
                             id: m.id,
+                            zoom_account_id: m.zoom_account_id,
                             no_hp: m.no_hp
                         })
                         .then(res => {
@@ -939,6 +959,12 @@
                         .catch(err => {
                             alert(err.response?.data?.message || 'Gagal hapus')
                         })
+                },
+                getCurrentTime() {
+                    const now = new Date()
+                    const hours = String(now.getHours()).padStart(2, '0')
+                    const minutes = String(now.getMinutes()).padStart(2, '0')
+                    return `${hours}:${minutes}`
                 }
             },
 
